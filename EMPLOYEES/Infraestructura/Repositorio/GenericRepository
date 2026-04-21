@@ -1,76 +1,100 @@
-using employees.aplicacion.interfaces;
+using EMPLOYEES.Dominio.interfaces;
+using EMPLOYEES.Infraestructura.Contexto;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
-namespace employees.Infraestructura.Repositorios
+namespace EMPLOYEES.Infraestructura.Repositorio
 {
     public class GenericRepository<T> : IGenericRepository<T> where T : class
-{
-    private readonly EmployeesDbContext _context;
-    private readonly DbSet<T> _dbSet;
-
-    public GenericRepository(EmployeesDbContext context)
     {
-        _context = context;
-        _dbSet = context.Set<T>();
-    }
+        private readonly EmployeesDbContext _databasecontext;
+        private readonly DbSet<T> _dbSet;
 
-    public async Task<List<T>> GetAllAsync(
-        Expression<Func<T, bool>>? filter = null, 
-        bool tracked = true, 
-        string? includeProperties = null)
-    {
-        IQueryable<T> query = _dbSet;
-
-        // 1. Optimización de rastreo
-        if (!tracked) query = query.AsNoTracking();
-
-        // 2. Filtro dinámico (donde ocurre la magia)
-        if (filter != null) query = query.Where(filter);
-
-        // 3. Carga de tablas relacionadas (Eager Loading)
-        if (!string.IsNullOrEmpty(includeProperties))
+        public GenericRepository(EmployeesDbContext context)
         {
-            foreach (var includeProp in includeProperties.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                query = query.Include(includeProp);
-            }
+            _databasecontext = context;
+            _dbSet = context.Set<T>();
         }
 
-        return await query.ToListAsync();
-    }
-
-    public async Task<T?> GetAsync(
-        Expression<Func<T, bool>> filter, 
-        bool tracked = true, 
-        string? includeProperties = null)
-    {
-        IQueryable<T> query = _dbSet;
-        if (!tracked) query = query.AsNoTracking();
-
-        if (!string.IsNullOrEmpty(includeProperties))
+        public async Task AddAsync(T entity)
         {
-            foreach (var includeProp in includeProperties.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                query = query.Include(includeProp);
-            }
+            await _dbSet.AddAsync(entity);
         }
 
-        return await query.FirstOrDefaultAsync(filter);
-    }
+        public async Task<T?> GetByIdAsync(int id)   // ← T? permite null
+        {
+            return await _dbSet.FindAsync(id);
+        }
 
-    public async Task CreateAsync(T entity)
-    {
-        await _dbSet.AddAsync(entity);
-    }
+        public async Task<List<T>> GetAllAsync(bool tracked = true)  
+        {
+            IQueryable<T> query = _dbSet;
+            if (!tracked) query = query.AsNoTracking();
+            return await query.ToListAsync();
+        }
 
-    public async Task RemoveAsync(T entity)
-    {
-        _dbSet.Remove(entity);
-    }
+        public Task UpdateAsync(T entity)  
+        {
+            _dbSet.Update(entity);
+            return Task.CompletedTask;
+        }
 
-    public async Task SaveAsync()
-    {
-        await _context.SaveChangesAsync();
+        public async Task DeleteByIdAsync(int id)
+        {
+            var entity = await _dbSet.FindAsync(id);
+            if (entity != null)
+                _dbSet.Remove(entity);
+        }
+
+        public async Task SaveAsync()
+        {
+            await _databasecontext.SaveChangesAsync();
+        }
+
+        public async Task<List<T>> GetAllAsync(
+            Expression<Func<T, bool>>? filter = null,
+            bool tracked = true,
+            string? includeProperties = null)
+        {
+            IQueryable<T> query = _dbSet;
+            if (!tracked) query = query.AsNoTracking();
+            if (filter != null) query = query.Where(filter);
+            if (!string.IsNullOrEmpty(includeProperties))
+            {
+                foreach (var includeProp in includeProperties.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    query = query.Include(includeProp);
+                }
+            }
+            return await query.ToListAsync();
+        }
+
+        public async Task<T?> GetAsync(
+            Expression<Func<T, bool>> filter,
+            bool tracked = true,
+            string? includeProperties = null)
+        {
+            IQueryable<T> query = _dbSet;
+            if (!tracked) query = query.AsNoTracking();
+            if (!string.IsNullOrEmpty(includeProperties))
+            {
+                foreach (var includeProp in includeProperties.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    query = query.Include(includeProp);
+                }
+            }
+            return await query.FirstOrDefaultAsync(filter);
+        }
+
+        public async Task CreateAsync(T entity)
+        {
+            await _dbSet.AddAsync(entity);
+        }
+
+        public Task RemoveAsync(T entity)
+        {
+            _dbSet.Remove(entity);
+            return Task.CompletedTask;
+        }
     }
-}
 }
